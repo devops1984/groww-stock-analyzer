@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import re
 from prophet import Prophet
 
 from stock_forecast import TOP_20_BY_CATEGORY, TICKER_MAP, normalize_stock_name
@@ -25,6 +26,11 @@ else:
 
 def ticker_for(stock_name):
     return TICKER_MAP.get(normalize_stock_name(stock_name))
+
+
+def first_number(value):
+    match = re.search(r"\d+(?:\.\d+)?", str(value).replace(",", ""))
+    return float(match.group()) if match else None
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -110,10 +116,33 @@ st.dataframe(
 )
 
 st.subheader("Portfolio data quality")
-if "Quantity" not in portfolio or portfolio["Quantity"].fillna("").astype(str).str.strip().eq("").all():
+quantities = portfolio.get("Quantity", pd.Series(dtype=str)).map(first_number)
+if quantities.empty or quantities.isna().all():
     st.warning("Groww did not provide quantities in groww_portfolio.csv. Allocation, invested value, and portfolio profit/loss cannot be calculated until quantities are available.")
 else:
-    st.success("Quantities are available; allocation analysis can be added from those holdings.")
+    portfolio_values = []
+    for stock_name, quantity in zip(portfolio["Stock"], quantities):
+        metrics = analysis[analysis["Stock"] == str(stock_name).strip()]
+        if quantity and not metrics.empty:
+            current_price = metrics.iloc[0]["Current price"]
+            portfolio_values.append({
+                "Stock": stock_name,
+                "Quantity": quantity,
+                "Market value": quantity * current_price,
+            })
+
+    holdings = pd.DataFrame(portfolio_values)
+    if holdings.empty:
+        st.warning("Quantities were found, but no holdings matched the current ticker mapping.")
+    else:
+        holdings["Allocation %"] = holdings["Market value"] / holdings["Market value"].sum() * 100
+        st.success("Quantities are available. Allocation is calculated from current market prices.")
+        st.dataframe(
+            holdings.style.format({"Quantity": "{:.2f}", "Market value": "₹{:,.2f}", "Allocation %": "{:.1f}%"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Profit/loss still requires your purchase price or cost basis, which is not included in the scraped CSV.")
 
 selected_stock = st.selectbox("Choose a stock to forecast", available_stocks)
 

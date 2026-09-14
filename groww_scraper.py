@@ -1,5 +1,6 @@
 from importlib import import_module
 import csv
+import re
 
 def scrape_groww_portfolio(email_id):
     try:
@@ -46,8 +47,14 @@ def scrape_groww_portfolio(email_id):
 
             stock = values[stock_index]
             remaining_values = values[stock_index + 1:]
-            quantity = remaining_values[0] if remaining_values else ""
-            price = remaining_values[1] if len(remaining_values) > 1 else ""
+            quantity = next(
+                (value for value in remaining_values if re.fullmatch(r"\d+(?:\.\d+)?", value)),
+                "",
+            )
+            price = next(
+                (value for value in remaining_values if "₹" in value),
+                "",
+            )
             portfolio_data.append([stock, quantity, price])
 
     with open("groww_portfolio.csv", "w", newline="", encoding="utf-8") as portfolio_file:
