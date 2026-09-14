@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*_forecast.png
+.venv/
+venv/
+.streamlit/secrets.toml
